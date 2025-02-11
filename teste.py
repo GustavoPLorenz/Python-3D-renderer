@@ -1,101 +1,147 @@
 import pygame
 import numpy as np
-import math
+import logging
 
-# Configurações iniciais
-WIDTH, HEIGHT = 800, 600
-BLACK, WHITE = (0, 0, 0), (255, 255, 255)
+# Configuração do logging (log mais compacto)
+logging.basicConfig(
+    filename="debug_log.txt",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(message)s"
+)
 
 # Inicializa o Pygame
 pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-clock = pygame.time.Clock()
+WindowSize = (600, 600)
+Window = pygame.display.set_mode(WindowSize)
+pygame.display.set_caption("PyRenderer")
 
-# Ponto que será rotacionado
-point = np.array([1, 0, 0])
+# Parâmetros da câmera
+CameraX = 0
+CameraY = 0
+CameraZ = -3
+CameraYDegrees = 0
 
-# Ponto ao redor do qual o ponto vai girar (ponto pivô)
-pivot = np.array([0, 0, 0])
+F = 100  # Fator de projeção
 
-# Distância da câmera para projeção
-distance = 5
+# Definição do objeto (um cubo)
+Objects = [{
+    "Name": "Cube",
+    "Object": [
+        [(0, 0, 5), (1, 0, 5)],
+        [(0, 0, 5), (0, 1, 5)],
+        [(0, 0, 5), (0, 0, 6)],
+        [(1, 0, 5), (1, 1, 5)],
+        [(1, 0, 5), (1, 0, 6)],
+        [(0, 1, 5), (1, 1, 5)],
+        [(0, 1, 5), (0, 1, 6)],
+        [(1, 1, 5), (1, 1, 6)],
+        [(0, 1, 6), (1, 1, 6)],
+        [(0, 1, 6), (0, 0, 6)],
+        [(1, 0, 6), (1, 1, 6)],
+        [(1, 0, 6), (0, 0, 6)]
+    ],
+}]
 
-def rotate_point_3d(point, pivot, theta, axis):
-    """ Rotaciona um ponto em torno de um ponto pivô em 3D usando matrizes """
-    theta = math.radians(theta)  # Converte para radianos
-    x, y, z = point - pivot  # Translada para a origem do pivô
+def get_object_center(obj):
+    """Calcula o centro do objeto em coordenadas mundiais."""
+    xs, ys, zs = [], [], []
+    for line in obj["Object"]:
+        for point in line:
+            xs.append(point[0])
+            ys.append(point[1])
+            zs.append(point[2])
+    return sum(xs)/len(xs), sum(ys)/len(ys), sum(zs)/len(zs)
+
+def ViewTransform(Object):
+    """Transforma os pontos do objeto do espaço mundial para o espaço da câmera."""
+    theta = np.radians(CameraYDegrees)
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
     
-    if axis == 'x':
-        rotation_matrix = np.array([
-            [1, 0, 0],
-            [0, math.cos(theta), -math.sin(theta)],
-            [0, math.sin(theta), math.cos(theta)]
-        ])
-    elif axis == 'y':  # Rotação no eixo Y (plano XZ)
-        rotation_matrix = np.array([
-            [math.cos(theta), 0, math.sin(theta)],
-            [0, 1, 0],
-            [-math.sin(theta), 0, math.cos(theta)]
-        ])
-    elif axis == 'z':
-        rotation_matrix = np.array([
-            [math.cos(theta), -math.sin(theta), 0],
-            [math.sin(theta), math.cos(theta), 0],
-            [0, 0, 1]
-        ])
-    else:
-        return point  # Retorna o mesmo ponto se o eixo for inválido
-    
-    # Aplica a rotação
-    rotated_point = np.dot(rotation_matrix, [x, y, z])
-    
-    # Translada de volta para a posição original do pivô
-    return rotated_point + pivot
+    TransformedObject = {"Name": Object["Name"], "Object": []}
+    for line in Object["Object"]:
+        new_line = []
+        for point in line:
+            x = point[0] - CameraX
+            y = point[1] - CameraY
+            z = point[2] - CameraZ
+            x_new = x * cos_theta + z * sin_theta
+            z_new = -x * sin_theta + z * cos_theta
+            new_line.append((x_new, y, z_new))
+        TransformedObject["Object"].append(new_line)
+    return TransformedObject
 
-def project_3d_to_2d(point):
-    """ Projeta um ponto 3D para 2D usando perspectiva """
-    x, y, z = point
-    if z + distance == 0:
-        return WIDTH // 2, HEIGHT // 2  # Evita divisão por zero
-    
-    factor = distance / (z + distance)  # Fator de projeção
-    x_2d = int(WIDTH // 2 + x * factor * 100)  # Ajuste de escala
-    y_2d = int(HEIGHT // 2 - y * factor * 100)  # Inverter y para alinhar
-    
-    return x_2d, y_2d
+def Object2D(Object):
+    """Projeta os pontos 3D no plano 2D usando projeção em perspectiva."""
+    Object2D = {"Name": Object["Name"], "Object": []}
+    for line in Object["Object"]:
+        new_line = []
+        for point in line:
+            x, y, z = point
+            if z <= 0:
+                continue
+            scale = F / z
+            new_line.append(((x * scale) + 300, (y * scale) + 300))  # Centraliza na tela
+        Object2D["Object"].append(new_line)
+    return Object2D
 
-# Loop principal
-running = True
-angle = 0
+def DrawObject(Object2D):
+    """Desenha o objeto na tela."""
+    for line in Object2D["Object"]:
+        if len(line) == 2:
+            pygame.draw.line(Window, (0, 255, 0), line[0], line[1])
 
-while running:
-    screen.fill(BLACK)
-    
+Running = True
+frame_count = 0
+
+while Running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            Running = False
 
-    # Rotaciona o ponto em torno do pivô no eixo Y (plano XZ)
-    rotated_point = rotate_point_3d(point, pivot, angle, axis='y')
+    Keys = pygame.key.get_pressed()
+    pressed_keys = []
+    move_speed = 0.001
+    rotate_speed = 0.05
 
-    # Converte o ponto 3D para 2D
-    projected_point = project_3d_to_2d(rotated_point)
+    if Keys[pygame.K_w]:
+        CameraZ += move_speed
+        pressed_keys.append("W")
+    if Keys[pygame.K_s]:
+        CameraZ -= move_speed
+        pressed_keys.append("S")
+    if Keys[pygame.K_a]:
+        CameraX -= move_speed
+        pressed_keys.append("A")
+    if Keys[pygame.K_d]:
+        CameraX += move_speed
+        pressed_keys.append("D")
+    if Keys[pygame.K_LSHIFT]:
+        CameraY -= move_speed
+        pressed_keys.append("SHIFT")
+    if Keys[pygame.K_SPACE]:
+        CameraY += move_speed
+        pressed_keys.append("SPACE")
+    if Keys[pygame.K_LEFT]:
+        CameraYDegrees += rotate_speed
+        pressed_keys.append("LEFT")
+    if Keys[pygame.K_RIGHT]:
+        CameraYDegrees -= rotate_speed
+        pressed_keys.append("RIGHT")
 
-    # Desenha o ponto pivot
-    pivot_projected = project_3d_to_2d(pivot)
-    pygame.draw.circle(screen, WHITE, pivot_projected, 10)
+    # Apenas grava log a cada 10 frames para reduzir o tamanho do arquivo
+    if frame_count % 10 == 0:
+        cube_center = get_object_center(Objects[0])
+        logging.debug(f"Camera: ({CameraX:.3f}, {CameraY:.3f}, {CameraZ:.3f}), Rotation: {CameraYDegrees:.1f}°, Keys: {pressed_keys}")
+        logging.debug(f"Cube Center (world): {cube_center}")
 
-    # Desenha o ponto rotacionado
-    pygame.draw.circle(screen, (0, 255, 0), projected_point, 15)
+    transformed_obj = ViewTransform(Objects[0])
+    projected_obj = Object2D(transformed_obj)
+    DrawObject(projected_obj)
 
-    # Atualiza a tela
     pygame.display.flip()
+    Window.fill((0, 0, 0))
 
-    # Incrementa o ângulo para a rotação contínua
-    angle += 1
-    if angle >= 360:
-        angle = 0
-
-    clock.tick(60)  # Mantém 60 FPS
+    frame_count += 1  # Incrementa o contador de frames
 
 pygame.quit()
