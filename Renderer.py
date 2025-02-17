@@ -1,6 +1,7 @@
 import pygame
 import numpy as np
 import copy
+import time
 
 #Pygame init
 pygame.init()
@@ -70,55 +71,45 @@ def Object2D(MovedObject):
 def DrawObject(Object2D):
     for Line in Object2D["Object"]:
         try:
-            pygame.draw.line(Window,Object2D["Color"],Line[0],Line[1], 1)
+            pygame.draw.polygon(Window,Object2D["Color"],Line, 1)
         except:
             pass
 
 #Variable definitions
 Running = True
-Objects = [{
-        "Name": "Ground",
-        "Color": (0,255,0),
-        "Object": [
-            [(-5, -1, 0), (5, -1, 0)],
-            [(5, -1, 0), (5, -1, 10)],
-            [(5, -1, 10), (-5, -1, 10)],
-            [(-5, -1, 10), (-5, -1, 0)]
-        ]
-    },{
-        "Name": "Tree",
-        "Color":(120,64,8),
-        "Object":[
-            [(-0.5,-1,4.5),(0.5,-1,4.5)],
-            [(-0.5,-1,5.5),(0.5,-1,5.5)],
-            [(-0.5,-1,4.5),(-0.5,-1,5.5)],
-            [(0.5,-1,5.5),(0.5,-1,4.5)],
-            [(-0.5,3,4.5),(0.5,3,4.5)],
-            [(-0.5,3,5.5),(0.5,3,5.5)],
-            [(-0.5,3,4.5),(-0.5,3,5.5)],
-            [(0.5,3,5.5),(0.5,3,4.5)],
-            [(-0.5,-1,4.5),(-0.5,3,4.5)],
-            [(0.5,-1,5.5),(0.5,3,5.5)],
-            [(0.5,-1,4.5),(0.5,3,4.5)],
-            [(-0.5,-1,5.5),(-0.5,3,5.5)],
-        ]
-    },{
-        "Name": "Leaves",
-        "Color":(0,50,0),
-        "Object":[
-            [(-1.5,3,3.5),(1.5,3,3.5)],
-            [(-1.5,3,6.5),(1.5,3,6.5)],
-            [(-1.5,3,3.5),(-1.5,3,6.5)],
-            [(1.5,3,6.5),(1.5,3,3.5)],
-            [(-1.5,3,3.5),(0,7,5)],
-            [(-1.5,3,6.5),(0,7,5)],
-            [(1.5,3,3.5),(0,7,5)],
-            [(1.5,3,6.5),(0,7,5)],
-        ]
-    }
-    ]
+Objects = [{}]
 
+#Transform .obj in list
+Archive = open("Car.obj")
+Content = Archive.read()
+Lines = Content.split("\n")
+Vertex = []
+for Line in Lines:
+    if len(Line) >= 1 :
+        LineParts = Line.split(" ")
+        if LineParts[0] == "v":
+            
+            X = float(LineParts[1])
+            Y = float(LineParts[2])
+            Z = float(LineParts[3])
 
+            Vertex.append((X,Y,Z))
+ObjObject = []
+for Line in Lines:
+    ObjLine = []
+    if len(Line) >= 1:
+        LineParts = Line.split(" ")
+        if LineParts[0] == "f":
+            for VertexPosition in LineParts[1:-1]:
+                VertexNumber = int(VertexPosition.split("/")[0]) - 1
+                ObjLine.append(Vertex[VertexNumber])
+            ObjObject.append(ObjLine)
+Objects[0] = {
+    "Name": "Teste",
+    "Color": (255,255,255),
+    "Object": ObjObject
+}
+            
 RotatedObjects = copy.deepcopy(Objects)
 Objects2D = copy.deepcopy(Objects)
 D = 1
@@ -140,7 +131,7 @@ while Running:
     
     Keys = pygame.key.get_pressed()
     move_speed = 0.01
-    theta = np.radians(CameraYDegrees)  # Converte o ângulo para radianos
+    theta = np.radians(CameraYDegrees)
 
     forward_x = np.sin(theta) * move_speed
     forward_z = np.cos(theta) * move_speed
@@ -148,21 +139,21 @@ while Running:
     right_x = np.cos(theta) * move_speed
     right_z = -np.sin(theta) * move_speed
 
-    if Keys[pygame.K_w]:  # Anda para frente
+    if Keys[pygame.K_w]:
         CameraX -= forward_x
-        CameraZ += forward_z  # Z diminui ao andar para frente
-    if Keys[pygame.K_s]:  # Anda para trás
+        CameraZ += forward_z
+    if Keys[pygame.K_s]:
         CameraX += forward_x
         CameraZ -= forward_z
-    if Keys[pygame.K_a]:  # Anda para a esquerda
+    if Keys[pygame.K_a]:
         CameraX -= right_x
         CameraZ += right_z
-    if Keys[pygame.K_d]:  # Anda para a direita
+    if Keys[pygame.K_d]:
         CameraX += right_x
         CameraZ -= right_z
-    if Keys[pygame.K_LSHIFT]:  # Desce no eixo Y
+    if Keys[pygame.K_LSHIFT]:
         CameraY -= move_speed
-    if Keys[pygame.K_SPACE]:  # Sobe no eixo Y
+    if Keys[pygame.K_SPACE]: 
         CameraY += move_speed
     
     if Keys[pygame.K_RIGHT]:
